@@ -7,6 +7,7 @@ exports.createProduct = async (req, res) => {
     const {
       productCode, name, description, price, offerPrice, categoryId,
       subcategoryId, inStock = true, bestSeller = false, tags,
+      stockQuantity = 0, youtubeLink = '', isActive = true
     } = req.body;
 
     // Validate required fields
@@ -58,13 +59,28 @@ exports.createProduct = async (req, res) => {
       images: uploadedImages,
       inStock,
       bestSeller,
+      stockQuantity,
+      youtubeLink,
+      isActive,
       tags: tags?.split(',').map(tag => tag.trim()),
     });
 
     await product.save();
-    res.status(201).json(product);
+    
+    // Return the created product with populated category and subcategory
+    const createdProduct = await Product.findById(product._id)
+      .populate('categoryId', 'name')
+      .populate('subcategoryId', 'name');
+      
+    res.status(201).json({
+      success: true,
+      message: 'Product created successfully',
+      product: createdProduct
+    });
 
   } catch (error) {
+    console.error('Error creating product:', error);
+    
     // Handle duplicate product code error
     if (error.code === 11000 && error.keyPattern && error.keyPattern.productCode) {
       return res.status(409).json({ message: 'Product code already exists. Please use a unique code.' });
@@ -85,7 +101,7 @@ exports.getAllProducts = async (req, res) => {
   try {
     const {
       categoryId, subcategoryId, tag, bestSeller, search,
-      page = 1, limit = 10,
+      page = 1, limit = 10, isActive, inStock, minStock, maxStock
     } = req.query;
 
     const filter = {};
@@ -93,7 +109,17 @@ exports.getAllProducts = async (req, res) => {
     if (categoryId) filter.categoryId = categoryId;
     if (subcategoryId) filter.subcategoryId = subcategoryId;
     if (bestSeller === 'true') filter.bestSeller = true;
+    if (isActive !== undefined) filter.isActive = isActive === 'true';
+    if (inStock !== undefined) filter.inStock = inStock === 'true';
     if (tag) filter.tags = { $in: [tag] };
+    
+    // Stock quantity filter
+    if (minStock !== undefined || maxStock !== undefined) {
+      filter.stockQuantity = {};
+      if (minStock !== undefined) filter.stockQuantity.$gte = Number(minStock);
+      if (maxStock !== undefined) filter.stockQuantity.$lte = Number(maxStock);
+    }
+    
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -111,13 +137,19 @@ exports.getAllProducts = async (req, res) => {
       .limit(Number(limit));
 
     res.json({
+      success: true,
       products,
       total,
       page: Number(page),
       pages: Math.ceil(total / limit),
     });
   } catch (error) {
-    res.status(500).json({ message: 'Fetching products failed', error: error.message });
+    console.error('Error fetching products:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Fetching products failed', 
+      error: error.message 
+    });
   }
 };
 
@@ -160,6 +192,9 @@ exports.getProductById = async (req, res) => {
       subcategoryId: product.subcategoryId,
       images: product.images,
       inStock: product.inStock,
+      stockQuantity: product.stockQuantity || 0,
+      youtubeLink: product.youtubeLink || '',
+      isActive: product.isActive !== undefined ? product.isActive : true,
       bestSeller: product.bestSeller,
       tags: product.tags,
       createdAt: product.createdAt,
@@ -195,10 +230,14 @@ exports.updateProduct = async (req, res) => {
 
     const {
       productCode, name, description, price, offerPrice, categoryId,
-      subcategoryId, inStock, bestSeller, tags,
+      subcategoryId, inStock, bestSeller, tags, stockQuantity, youtubeLink,
+      isActive, removeImages
     } = req.body;
 
-    const product = await Product.findById(id);
+    const product = await Product.findById(id)
+      .populate('categoryId', 'name')
+      .populate('subcategoryId', 'name');
+      
     if (!product) return res.status(404).json({ message: 'Product not found' });
 
     // Check if product code is being updated and if it's unique
@@ -213,20 +252,89 @@ exports.updateProduct = async (req, res) => {
       product.productCode = productCode.toUpperCase();
     }
 
-    product.name = name;
-    product.description = description;
-    product.price = price;
-    product.offerPrice = offerPrice;
-    product.categoryId = categoryId;
-    product.subcategoryId = subcategoryId;
-    product.inStock = inStock;
-    product.bestSeller = bestSeller;
-    product.tags = tags?.split(',').map(tag => tag.trim());
+    // Handle image updates
+    let currentImages = [...product.images];
+    
+    // Remove images if specified
+    if (removeImages) {
+      const imagesToRemove = removeImages.split(',').map(id => id.trim());
+      
+      // Delete images from Cloudinary
+      for (const publicId of imagesToRemove) {
+        const imageToDelete = currentImages.find(img => img.publicId === publicId);
+        if (imageToDelete) {
+          await cloudinary.uploader.destroy(publicId);
+        }
+      }
+      
+      // Filter out removed images
+      currentImages = currentImages.filter(img => !imagesToRemove.includes(img.publicId));
+    }
+    
+    // Add new images if provided
+    if (req.files && req.files.length > 0) {
+      // Check if total images would exceed limit
+      if (currentImages.length + req.files.length > 3) {
+        return res.status(400).json({ 
+          message: 'Maximum 3 images allowed. Please remove some existing images first.' 
+        });
+      }
+      
+      // Upload new images to Cloudinary
+      for (const file of req.files) {
+        const result = await new Promise((resolve, reject) => {
+          cloudinary.uploader.upload_stream(
+            { folder: 'products' },
+            (err, result) => {
+              if (err) reject(err);
+              else resolve(result);
+            }
+          ).end(file.buffer);
+        });
+
+        currentImages.push({
+          url: result.secure_url,
+          publicId: result.public_id,
+        });
+      }
+    }
+    
+    // Update product fields
+    product.name = name || product.name;
+    product.description = description || product.description;
+    product.price = price || product.price;
+    product.offerPrice = offerPrice !== undefined ? offerPrice : product.offerPrice;
+    product.categoryId = categoryId || product.categoryId;
+    product.subcategoryId = subcategoryId || product.subcategoryId;
+    product.inStock = inStock !== undefined ? inStock : product.inStock;
+    product.bestSeller = bestSeller !== undefined ? bestSeller : product.bestSeller;
+    product.stockQuantity = stockQuantity !== undefined ? stockQuantity : product.stockQuantity;
+    product.youtubeLink = youtubeLink !== undefined ? youtubeLink : product.youtubeLink;
+    product.isActive = isActive !== undefined ? isActive : product.isActive;
+    
+    if (tags) {
+      product.tags = tags.split(',').map(tag => tag.trim());
+    }
+    
+    // Update images
+    product.images = currentImages;
 
     await product.save();
-    res.json(product);
+    
+    // Return the updated product with populated category and subcategory
+    const updatedProduct = await Product.findById(id)
+      .populate('categoryId', 'name')
+      .populate('subcategoryId', 'name');
+      
+    res.json({
+      success: true,
+      message: 'Product updated successfully',
+      product: updatedProduct
+    });
 
   } catch (error) {
+    console.error('Error updating product:', error);
+    
     // Handle duplicate product code error
     if (error.code === 11000 && error.keyPattern && error.keyPattern.productCode) {
       return res.status(409).json({ message: 'Product code already exists. Please use a unique code.' });
@@ -302,6 +410,9 @@ exports.getDashboardStats = async (req, res) => {
       outOfStock,
       inStock,
       productsWithOffer,
+      activeProducts,
+      inactiveProducts,
+      totalStockQuantity,
       totalValueResult
     ] = await Promise.all([
       // Total number of products
@@ -322,6 +433,22 @@ exports.getDashboardStats = async (req, res) => {
         $expr: { $lt: ["$offerPrice", "$price"] }
       }),
       
+      // Active products
+      Product.countDocuments({ isActive: true }),
+      
+      // Inactive products
+      Product.countDocuments({ isActive: false }),
+      
+      // Total stock quantity
+      Product.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalStock: { $sum: "$stockQuantity" }
+          }
+        }
+      ]),
+      
       // Calculate total value of all products
       Product.aggregate([
         {
@@ -337,6 +464,11 @@ exports.getDashboardStats = async (req, res) => {
     const productsOriginalPrice = totalValueResult.length > 0 
       ? totalValueResult[0].totalValue 
       : 0;
+      
+    // Extract total stock quantity from aggregation result
+    const totalStock = totalStockQuantity.length > 0 
+      ? totalStockQuantity[0].totalStock 
+      : 0;
 
     // Prepare response
     const stats = {
@@ -345,16 +477,23 @@ exports.getDashboardStats = async (req, res) => {
       outOfStock,
       inStock,
       productsWithOffer,
+      activeProducts,
+      inactiveProducts,
+      totalStock,
       productsOriginalPrice
     };
 
     console.log('Dashboard stats calculated:', stats);
 
-    res.status(200).json(stats);
+    res.status(200).json({
+      success: true,
+      stats
+    });
     
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
     res.status(500).json({ 
+      success: false,
       message: 'Failed to fetch dashboard statistics',
       error: error.message 
     });

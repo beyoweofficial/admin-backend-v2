@@ -19,7 +19,7 @@ router.get('/dashboard/stats', protect, getDashboardStats);
 router.get('/stats/categories', getProductCountsByCategory);
 router.get('/check-code/:productCode', checkProductCodeAvailability);
 router.get('/:id', getProductById);
-router.put('/:id', protect, updateProduct);
+router.put('/:id', protect, upload.array('images', 3), handleMulterError, updateProduct);
 router.delete('/:id', protect, deleteProduct);
 
 module.exports = router;

@@ -36,6 +36,9 @@ const swaggerJsDoc = {
           categoryId: { type: "string", description: "Category ID" },
           subcategoryId: { type: "string", description: "Subcategory ID" },
           inStock: { type: "boolean", default: true, description: "Stock availability" },
+          stockQuantity: { type: "integer", default: 0, description: "Available stock quantity" },
+          youtubeLink: { type: "string", description: "YouTube video link (optional)" },
+          isActive: { type: "boolean", default: true, description: "Product active status" },
           bestSeller: { type: "boolean", default: false, description: "Best seller flag" },
           tags: {
             type: "array",
@@ -81,6 +84,9 @@ const swaggerJsDoc = {
             description: "Product images"
           },
           inStock: { type: "boolean", description: "Stock availability" },
+          stockQuantity: { type: "integer", description: "Available stock quantity" },
+          youtubeLink: { type: "string", description: "YouTube video link (optional)" },
+          isActive: { type: "boolean", description: "Product active status" },
           bestSeller: { type: "boolean", description: "Best seller flag" },
           tags: {
             type: "array",
@@ -100,11 +106,13 @@ const swaggerJsDoc = {
       ProductCodeAvailability: {
         type: "object",
         properties: {
+          success: { type: "boolean", default: true, description: "Success flag" },
           productCode: { type: "string", description: "Product code checked (uppercase)" },
           isAvailable: { type: "boolean", description: "Whether the code is available" },
           message: { type: "string", description: "Availability message" }
         },
         example: {
+          success: true,
           productCode: "ABC123",
           isAvailable: false,
           message: "Product code is already taken"
@@ -289,6 +297,9 @@ const swaggerJsDoc = {
                   categoryId: { type: "string", description: "Category ID" },
                   subcategoryId: { type: "string", description: "Subcategory ID" },
                   inStock: { type: "boolean", default: true, description: "Stock availability" },
+                  stockQuantity: { type: "integer", default: 0, description: "Available stock quantity" },
+                  youtubeLink: { type: "string", description: "YouTube video link (optional)" },
+                  isActive: { type: "boolean", default: true, description: "Product active status" },
                   bestSeller: { type: "boolean", default: false, description: "Best seller flag" },
                   tags: { type: "string", description: "Comma-separated tags" },
                   images: {
@@ -308,7 +319,48 @@ const swaggerJsDoc = {
             description: "Product created successfully",
             content: {
               "application/json": {
-                schema: { $ref: "#/components/schemas/ProductDetailed" }
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", default: true },
+                    message: { type: "string" },
+                    product: { $ref: "#/components/schemas/ProductDetailed" }
+                  }
+                },
+                example: {
+                  success: true,
+                  message: "Product created successfully",
+                  product: {
+                    _id: "60d21b4667d0d8992e610c85",
+                    productCode: "PWH2024",
+                    name: "Premium Wireless Headphones",
+                    description: "High-quality wireless headphones with noise cancellation",
+                    price: 299.99,
+                    offerPrice: 249.99,
+                    categoryId: {
+                      _id: "60d21b4667d0d8992e610c80",
+                      name: "Electronics"
+                    },
+                    subcategoryId: {
+                      _id: "60d21b4667d0d8992e610c81",
+                      name: "Audio"
+                    },
+                    images: [
+                      {
+                        url: "https://res.cloudinary.com/demo/image/upload/v1/products/headphones1.jpg",
+                        publicId: "products/headphones1"
+                      }
+                    ],
+                    inStock: true,
+                    stockQuantity: 25,
+                    youtubeLink: "https://www.youtube.com/watch?v=example",
+                    isActive: true,
+                    bestSeller: true,
+                    tags: ["wireless", "noise-cancelling", "premium"],
+                    createdAt: "2023-06-22T10:30:00.000Z",
+                    updatedAt: "2023-06-22T10:30:00.000Z"
+                  }
+                }
               }
             }
           },
@@ -412,6 +464,30 @@ const swaggerJsDoc = {
             description: "Filter best sellers"
           },
           { 
+            name: "isActive", 
+            in: "query", 
+            schema: { type: "string", enum: ["true", "false"] },
+            description: "Filter by active status"
+          },
+          { 
+            name: "inStock", 
+            in: "query", 
+            schema: { type: "string", enum: ["true", "false"] },
+            description: "Filter by stock availability"
+          },
+          { 
+            name: "minStock", 
+            in: "query", 
+            schema: { type: "integer" },
+            description: "Filter by minimum stock quantity"
+          },
+          { 
+            name: "maxStock", 
+            in: "query", 
+            schema: { type: "integer" },
+            description: "Filter by maximum stock quantity"
+          },
+          { 
             name: "search", 
             in: "query", 
             schema: { type: "string" },
@@ -430,7 +506,43 @@ const swaggerJsDoc = {
             description: "Number of items per page"
           },
         ],
-        responses: { 200: { description: "List of products" } },
+        responses: { 
+          200: { 
+            description: "List of products",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", default: true },
+                    products: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/ProductDetailed" }
+                    },
+                    total: { type: "integer", description: "Total number of products matching the filter" },
+                    page: { type: "integer", description: "Current page number" },
+                    pages: { type: "integer", description: "Total number of pages" }
+                  }
+                }
+              }
+            }
+          },
+          500: {
+            description: "Error fetching products",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", default: false },
+                    message: { type: "string" },
+                    error: { type: "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
       },
     },
     "/products/{id}": {
@@ -487,6 +599,9 @@ const swaggerJsDoc = {
                       }
                     ],
                     inStock: true,
+                    stockQuantity: 25,
+                    youtubeLink: "https://www.youtube.com/watch?v=example",
+                    isActive: true,
                     bestSeller: true,
                     tags: ["wireless", "noise-cancelling", "premium"],
                     createdAt: "2023-06-22T10:30:00.000Z",
@@ -552,22 +667,66 @@ const swaggerJsDoc = {
       },
       put: {
         tags: ["Product"],
-        summary: "Update product (without image)",
+        summary: "Update product (with image support)",
+        description: "Update product details including images. Only fields that need to be updated should be sent. Existing data will be preserved for fields not included in the request.",
         security: [{ bearerAuth: [] }],
-        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        parameters: [{ 
+          name: "id", 
+          in: "path", 
+          required: true, 
+          schema: { type: "string" },
+          description: "Product ID to update"
+        }],
         requestBody: {
           content: {
-            "application/json": {
-              schema: { $ref: "#/components/schemas/Product" },
-            },
-          },
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+                properties: {
+                  productCode: { 
+                    type: "string", 
+                    description: "Unique product code (alphanumeric only)",
+                    example: "ABC123"
+                  },
+                  name: { type: "string", description: "Product name" },
+                  description: { type: "string", description: "Product description" },
+                  price: { type: "number", description: "Product price" },
+                  offerPrice: { type: "number", description: "Discounted price (optional)" },
+                  categoryId: { type: "string", description: "Category ID" },
+                  subcategoryId: { type: "string", description: "Subcategory ID" },
+                  inStock: { type: "boolean", description: "Stock availability" },
+                  stockQuantity: { type: "integer", description: "Available stock quantity" },
+                  youtubeLink: { type: "string", description: "YouTube video link (optional)" },
+                  isActive: { type: "boolean", description: "Product active status" },
+                  bestSeller: { type: "boolean", description: "Best seller flag" },
+                  tags: { type: "string", description: "Comma-separated tags" },
+                  removeImages: { 
+                    type: "string", 
+                    description: "Comma-separated list of image publicIds to remove" 
+                  },
+                  images: {
+                    type: "array",
+                    items: { type: "string", format: "binary" },
+                    description: "New product images to add (max 3 total including existing)"
+                  },
+                }
+              }
+            }
+          }
         },
         responses: { 
           200: { 
             description: "Product updated successfully",
             content: {
               "application/json": {
-                schema: { $ref: "#/components/schemas/ProductDetailed" }
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", default: true },
+                    message: { type: "string" },
+                    product: { $ref: "#/components/schemas/ProductDetailed" }
+                  }
+                }
               }
             }
           },
@@ -627,7 +786,51 @@ const swaggerJsDoc = {
         summary: "Delete product",
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
         security: [{ bearerAuth: [] }],
-        responses: { 200: { description: "Deleted" } },
+        responses: { 
+          200: { 
+            description: "Product deleted successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", default: true },
+                    message: { type: "string", example: "Product deleted successfully" }
+                  }
+                }
+              }
+            }
+          },
+          404: {
+            description: "Product not found",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", default: false },
+                    message: { type: "string", example: "Product not found" }
+                  }
+                }
+              }
+            }
+          },
+          500: {
+            description: "Delete failed",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", default: false },
+                    message: { type: "string", example: "Delete failed" },
+                    error: { type: "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
       },
     },
     "/products/check-code/{productCode}": {
@@ -655,6 +858,7 @@ const swaggerJsDoc = {
                   available: {
                     summary: "Code is available",
                     value: {
+                      success: true,
                       productCode: "ABC123",
                       isAvailable: true,
                       message: "Product code is available"
@@ -663,6 +867,7 @@ const swaggerJsDoc = {
                   taken: {
                     summary: "Code is already taken",
                     value: {
+                      success: true,
                       productCode: "XYZ789",
                       isAvailable: false,
                       message: "Product code is already taken"
@@ -719,21 +924,36 @@ const swaggerJsDoc = {
                 schema: {
                   type: "object",
                   properties: {
-                    totalProducts: { type: "integer", description: "Total number of products" },
-                    bestSellers: { type: "integer", description: "Number of products marked as best sellers" },
-                    outOfStock: { type: "integer", description: "Number of products that are out of stock" },
-                    inStock: { type: "integer", description: "Number of products that are in stock" },
-                    productsWithOffer: { type: "integer", description: "Number of products with offer price" },
-                    productsOriginalPrice: { type: "number", description: "Total value of all products at original price" }
+                    success: { type: "boolean", default: true },
+                    stats: {
+                      type: "object",
+                      properties: {
+                        totalProducts: { type: "integer", description: "Total number of products" },
+                        bestSellers: { type: "integer", description: "Number of products marked as best sellers" },
+                        outOfStock: { type: "integer", description: "Number of products that are out of stock" },
+                        inStock: { type: "integer", description: "Number of products that are in stock" },
+                        productsWithOffer: { type: "integer", description: "Number of products with offer price" },
+                        activeProducts: { type: "integer", description: "Number of active products" },
+                        inactiveProducts: { type: "integer", description: "Number of inactive products" },
+                        totalStock: { type: "integer", description: "Total stock quantity across all products" },
+                        productsOriginalPrice: { type: "number", description: "Total value of all products at original price" }
+                      }
+                    }
                   }
                 },
                 example: {
-                  totalProducts: 150,
-                  bestSellers: 25,
-                  outOfStock: 12,
-                  inStock: 138,
-                  productsWithOffer: 45,
-                  productsOriginalPrice: 125000
+                  success: true,
+                  stats: {
+                    totalProducts: 150,
+                    bestSellers: 25,
+                    outOfStock: 12,
+                    inStock: 138,
+                    productsWithOffer: 45,
+                    activeProducts: 142,
+                    inactiveProducts: 8,
+                    totalStock: 3250,
+                    productsOriginalPrice: 125000
+                  }
                 }
               }
             }
@@ -781,6 +1001,11 @@ const swaggerJsDoc = {
                 schema: {
                   type: "object",
                   properties: {
+                    success: { 
+                      type: "boolean", 
+                      default: true,
+                      description: "Success flag" 
+                    },
                     totalProducts: { 
                       type: "integer", 
                       description: "Total number of products in the system" 

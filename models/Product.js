@@ -45,6 +45,18 @@ const productSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  stockQuantity: {
+    type: Number,
+    default: 0,
+  },
+  youtubeLink: {
+    type: String,
+    default: '',
+  },
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
   bestSeller: {
     type: Boolean,
     default: false,
