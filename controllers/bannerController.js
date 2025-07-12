@@ -68,6 +68,42 @@ exports.updateBanner = async (req, res) => {
   }
 };
 
+// Get all banners
+exports.getAllBanners = async (req, res) => {
+  try {
+    const { type, page = 1, limit = 10 } = req.query;
+    
+    const filter = {};
+    
+    // Filter by type if provided (landscape/portrait)
+    if (type && ['landscape', 'portrait'].includes(type)) {
+      filter.type = type;
+    }
+
+    const skip = (page - 1) * limit;
+    const total = await Banner.countDocuments(filter);
+    
+    const banners = await Banner.find(filter)
+      .sort({ createdAt: -1 }) // Latest first
+      .skip(skip)
+      .limit(Number(limit));
+
+    res.status(200).json({
+      banners,
+      total,
+      page: Number(page),
+      pages: Math.ceil(total / limit),
+      hasNext: page * limit < total,
+      hasPrev: page > 1
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      message: 'Failed to fetch banners', 
+      error: error.message 
+    });
+  }
+};
+
 // Delete banner
 exports.deleteBanner = async (req, res) => {
   try {
