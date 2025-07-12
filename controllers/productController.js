@@ -5,9 +5,20 @@ const cloudinary = require('../config/cloudinary');
 exports.createProduct = async (req, res) => {
   try {
     const {
-      name, description, price, offerPrice, categoryId,
+      productCode, name, description, price, offerPrice, categoryId,
       subcategoryId, inStock = true, bestSeller = false, tags,
     } = req.body;
+
+    // Validate required fields
+    if (!productCode) {
+      return res.status(400).json({ message: 'Product code is required' });
+    }
+
+    // Check if product code already exists
+    const existingProduct = await Product.findOne({ productCode: productCode.toUpperCase() });
+    if (existingProduct) {
+      return res.status(409).json({ message: 'Product code already exists. Please use a unique code.' });
+    }
 
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: 'At least 1 image required' });
@@ -37,6 +48,7 @@ exports.createProduct = async (req, res) => {
     }
 
     const product = new Product({
+      productCode: productCode.toUpperCase(),
       name,
       description,
       price,
@@ -53,6 +65,17 @@ exports.createProduct = async (req, res) => {
     res.status(201).json(product);
 
   } catch (error) {
+    // Handle duplicate product code error
+    if (error.code === 11000 && error.keyPattern && error.keyPattern.productCode) {
+      return res.status(409).json({ message: 'Product code already exists. Please use a unique code.' });
+    }
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({ message: 'Validation failed', errors: validationErrors });
+    }
+    
     res.status(500).json({ message: 'Product creation failed', error: error.message });
   }
 };
@@ -71,7 +94,12 @@ exports.getAllProducts = async (req, res) => {
     if (subcategoryId) filter.subcategoryId = subcategoryId;
     if (bestSeller === 'true') filter.bestSeller = true;
     if (tag) filter.tags = { $in: [tag] };
-    if (search) filter.name = { $regex: search, $options: 'i' };
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { productCode: { $regex: search, $options: 'i' } }
+      ];
+    }
 
     const skip = (page - 1) * limit;
     const total = await Product.countDocuments(filter);
@@ -123,6 +151,7 @@ exports.getProductById = async (req, res) => {
     // Enhanced product data with detailed information
     const productDetails = {
       _id: product._id,
+      productCode: product.productCode,
       name: product.name,
       description: product.description,
       price: product.price,
@@ -165,12 +194,24 @@ exports.updateProduct = async (req, res) => {
     const { id } = req.params;
 
     const {
-      name, description, price, offerPrice, categoryId,
+      productCode, name, description, price, offerPrice, categoryId,
       subcategoryId, inStock, bestSeller, tags,
     } = req.body;
 
     const product = await Product.findById(id);
     if (!product) return res.status(404).json({ message: 'Product not found' });
+
+    // Check if product code is being updated and if it's unique
+    if (productCode && productCode.toUpperCase() !== product.productCode) {
+      const existingProduct = await Product.findOne({ 
+        productCode: productCode.toUpperCase(),
+        _id: { $ne: id } // Exclude current product
+      });
+      if (existingProduct) {
+        return res.status(409).json({ message: 'Product code already exists. Please use a unique code.' });
+      }
+      product.productCode = productCode.toUpperCase();
+    }
 
     product.name = name;
     product.description = description;
@@ -186,6 +227,17 @@ exports.updateProduct = async (req, res) => {
     res.json(product);
 
   } catch (error) {
+    // Handle duplicate product code error
+    if (error.code === 11000 && error.keyPattern && error.keyPattern.productCode) {
+      return res.status(409).json({ message: 'Product code already exists. Please use a unique code.' });
+    }
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({ message: 'Validation failed', errors: validationErrors });
+    }
+    
     res.status(500).json({ message: 'Update failed', error: error.message });
   }
 };
@@ -208,7 +260,31 @@ exports.deleteProduct = async (req, res) => {
   }
 };
 
+// Check if product code is available
+exports.checkProductCodeAvailability = async (req, res) => {
+  try {
+    const { productCode } = req.params;
+    
+    if (!productCode) {
+      return res.status(400).json({ message: 'Product code is required' });
+    }
 
+    const existingProduct = await Product.findOne({ 
+      productCode: productCode.toUpperCase() 
+    });
+
+    const isAvailable = !existingProduct;
+    
+    res.status(200).json({
+      productCode: productCode.toUpperCase(),
+      isAvailable: isAvailable,
+      message: isAvailable ? 'Product code is available' : 'Product code is already taken'
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: 'Check failed', error: error.message });
+  }
+};
 
 
 

@@ -10,12 +10,14 @@ const {
   deleteProduct,
   getDashboardStats,
   getProductCountsByCategory,
+  checkProductCodeAvailability,
 } = require('../controllers/productController');
 
 router.post('/', protect, upload.array('images', 3), handleMulterError, createProduct);
 router.get('/', getAllProducts);
 router.get('/dashboard/stats', protect, getDashboardStats);
 router.get('/stats/categories', getProductCountsByCategory);
+router.get('/check-code/:productCode', checkProductCodeAvailability);
 router.get('/:id', getProductById);
 router.put('/:id', protect, updateProduct);
 router.delete('/:id', protect, deleteProduct);

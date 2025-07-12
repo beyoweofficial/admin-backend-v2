@@ -22,16 +22,25 @@ const swaggerJsDoc = {
     schemas: {
       Product: {
         type: "object",
+        required: ["productCode", "name", "price", "categoryId", "subcategoryId"],
         properties: {
-          name: { type: "string" },
-          description: { type: "string" },
-          price: { type: "number" },
-          offerPrice: { type: "number" },
-          inStock: { type: "boolean" },
-          bestSeller: { type: "boolean" },
+          productCode: { 
+            type: "string", 
+            description: "Unique product identifier (alphanumeric only, auto-converted to uppercase)",
+            example: "ABC123"
+          },
+          name: { type: "string", description: "Product name" },
+          description: { type: "string", description: "Product description" },
+          price: { type: "number", description: "Product price" },
+          offerPrice: { type: "number", description: "Discounted price (optional)" },
+          categoryId: { type: "string", description: "Category ID" },
+          subcategoryId: { type: "string", description: "Subcategory ID" },
+          inStock: { type: "boolean", default: true, description: "Stock availability" },
+          bestSeller: { type: "boolean", default: false, description: "Best seller flag" },
           tags: {
             type: "array",
-            items: { type: "string" }
+            items: { type: "string" },
+            description: "Product tags (comma-separated string)"
           },
         }
       },
@@ -39,6 +48,7 @@ const swaggerJsDoc = {
         type: "object",
         properties: {
           _id: { type: "string", description: "Product unique identifier" },
+          productCode: { type: "string", description: "Unique product code (uppercase alphanumeric)" },
           name: { type: "string", description: "Product name" },
           description: { type: "string", description: "Product description" },
           price: { type: "number", description: "Original price" },
@@ -85,6 +95,19 @@ const swaggerJsDoc = {
           finalPrice: { type: "number", description: "Final price (offer price or regular price)" },
           imageCount: { type: "integer", description: "Number of images" },
           tagCount: { type: "integer", description: "Number of tags" }
+        }
+      },
+      ProductCodeAvailability: {
+        type: "object",
+        properties: {
+          productCode: { type: "string", description: "Product code checked (uppercase)" },
+          isAvailable: { type: "boolean", description: "Whether the code is available" },
+          message: { type: "string", description: "Availability message" }
+        },
+        example: {
+          productCode: "ABC123",
+          isAvailable: false,
+          message: "Product code is already taken"
         }
       },
       Category: {
@@ -252,35 +275,160 @@ const swaggerJsDoc = {
             "multipart/form-data": {
               schema: {
                 type: "object",
+                required: ["productCode", "name", "price", "categoryId", "subcategoryId", "images"],
                 properties: {
-                  name: { type: "string" },
-                  description: { type: "string" },
-                  price: { type: "number" },
-                  offerPrice: { type: "number" },
-                  categoryId: { type: "string" },
-                  subcategoryId: { type: "string" },
-                  inStock: { type: "boolean" },
-                  bestSeller: { type: "boolean" },
-                  tags: { type: "string" },
+                  productCode: { 
+                    type: "string", 
+                    description: "Unique product code (alphanumeric only)",
+                    example: "ABC123"
+                  },
+                  name: { type: "string", description: "Product name" },
+                  description: { type: "string", description: "Product description" },
+                  price: { type: "number", description: "Product price" },
+                  offerPrice: { type: "number", description: "Discounted price (optional)" },
+                  categoryId: { type: "string", description: "Category ID" },
+                  subcategoryId: { type: "string", description: "Subcategory ID" },
+                  inStock: { type: "boolean", default: true, description: "Stock availability" },
+                  bestSeller: { type: "boolean", default: false, description: "Best seller flag" },
+                  tags: { type: "string", description: "Comma-separated tags" },
                   images: {
                     type: "array",
                     items: { type: "string", format: "binary" },
+                    minItems: 1,
+                    maxItems: 3,
+                    description: "Product images (1-3 files required)"
                   },
                 },
               },
             },
           },
         },
-        responses: { 201: { description: "Product created" } },
+        responses: { 
+          201: { 
+            description: "Product created successfully",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ProductDetailed" }
+              }
+            }
+          },
+          400: {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    message: { type: "string" },
+                    errors: { 
+                      type: "array", 
+                      items: { type: "string" },
+                      description: "Validation error details"
+                    }
+                  }
+                },
+                examples: {
+                  missingProductCode: {
+                    summary: "Missing product code",
+                    value: { message: "Product code is required" }
+                  },
+                  invalidProductCode: {
+                    summary: "Invalid product code format",
+                    value: { 
+                      message: "Validation failed", 
+                      errors: ["Product code must contain only letters and numbers"] 
+                    }
+                  },
+                  missingImages: {
+                    summary: "No images provided",
+                    value: { message: "At least 1 image required" }
+                  },
+                  tooManyImages: {
+                    summary: "Too many images",
+                    value: { message: "Max 3 images allowed" }
+                  }
+                }
+              }
+            }
+          },
+          409: {
+            description: "Product code already exists",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    message: { type: "string" }
+                  }
+                },
+                example: {
+                  message: "Product code already exists. Please use a unique code."
+                }
+              }
+            }
+          },
+          500: {
+            description: "Product creation failed",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    message: { type: "string" },
+                    error: { type: "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
       },
       get: {
         tags: ["Product"],
         summary: "List products with filter/pagination",
         parameters: [
-          { name: "categoryId", in: "query", schema: { type: "string" } },
-          { name: "tag", in: "query", schema: { type: "string" } },
-          { name: "page", in: "query", schema: { type: "integer" } },
-          { name: "limit", in: "query", schema: { type: "integer" } },
+          { 
+            name: "categoryId", 
+            in: "query", 
+            schema: { type: "string" },
+            description: "Filter by category ID"
+          },
+          { 
+            name: "subcategoryId", 
+            in: "query", 
+            schema: { type: "string" },
+            description: "Filter by subcategory ID"
+          },
+          { 
+            name: "tag", 
+            in: "query", 
+            schema: { type: "string" },
+            description: "Filter by tag"
+          },
+          { 
+            name: "bestSeller", 
+            in: "query", 
+            schema: { type: "string", enum: ["true", "false"] },
+            description: "Filter best sellers"
+          },
+          { 
+            name: "search", 
+            in: "query", 
+            schema: { type: "string" },
+            description: "Search in product name and product code"
+          },
+          { 
+            name: "page", 
+            in: "query", 
+            schema: { type: "integer", default: 1 },
+            description: "Page number for pagination"
+          },
+          { 
+            name: "limit", 
+            in: "query", 
+            schema: { type: "integer", default: 10 },
+            description: "Number of items per page"
+          },
         ],
         responses: { 200: { description: "List of products" } },
       },
@@ -315,6 +463,7 @@ const swaggerJsDoc = {
                   success: true,
                   product: {
                     _id: "60d21b4667d0d8992e610c85",
+                    productCode: "PWH2024",
                     name: "Premium Wireless Headphones",
                     description: "High-quality wireless headphones with noise cancellation",
                     price: 299.99,
@@ -413,7 +562,65 @@ const swaggerJsDoc = {
             },
           },
         },
-        responses: { 200: { description: "Product updated" } },
+        responses: { 
+          200: { 
+            description: "Product updated successfully",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ProductDetailed" }
+              }
+            }
+          },
+          400: {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    message: { type: "string" },
+                    errors: { 
+                      type: "array", 
+                      items: { type: "string" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          404: {
+            description: "Product not found",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    message: { type: "string" }
+                  }
+                },
+                example: {
+                  message: "Product not found"
+                }
+              }
+            }
+          },
+          409: {
+            description: "Product code already exists",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    message: { type: "string" }
+                  }
+                },
+                example: {
+                  message: "Product code already exists. Please use a unique code."
+                }
+              }
+            }
+          }
+        },
       },
       delete: {
         tags: ["Product"],
@@ -422,6 +629,81 @@ const swaggerJsDoc = {
         security: [{ bearerAuth: [] }],
         responses: { 200: { description: "Deleted" } },
       },
+    },
+    "/products/check-code/{productCode}": {
+      get: {
+        tags: ["Product"],
+        summary: "Check product code availability",
+        description: "Check if a product code is available for use. Returns availability status and message.",
+        parameters: [
+          { 
+            name: "productCode", 
+            in: "path", 
+            required: true, 
+            schema: { type: "string" },
+            description: "Product code to check (will be converted to uppercase)",
+            example: "ABC123"
+          }
+        ],
+        responses: {
+          200: {
+            description: "Product code availability check completed",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ProductCodeAvailability" },
+                examples: {
+                  available: {
+                    summary: "Code is available",
+                    value: {
+                      productCode: "ABC123",
+                      isAvailable: true,
+                      message: "Product code is available"
+                    }
+                  },
+                  taken: {
+                    summary: "Code is already taken",
+                    value: {
+                      productCode: "XYZ789",
+                      isAvailable: false,
+                      message: "Product code is already taken"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          400: {
+            description: "Invalid request",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    message: { type: "string" }
+                  }
+                },
+                example: {
+                  message: "Product code is required"
+                }
+              }
+            }
+          },
+          500: {
+            description: "Server error",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    message: { type: "string" },
+                    error: { type: "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "/products/dashboard/stats": {
       get: {
