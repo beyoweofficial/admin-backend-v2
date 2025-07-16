@@ -8,6 +8,7 @@ const bannerRoutes = require('./routes/bannerRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const subcategoryRoutes = require('./routes/subcategoryRoutes');
 const productRoutes = require('./routes/productRoutes');
+const quickShoppingRoutes = require('./routes/quickShoppingRoutes');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDoc = require('./src/docs/swagger');
 
@@ -24,6 +25,7 @@ app.use('/api/banners', bannerRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/subcategories', subcategoryRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/quick-shopping', quickShoppingRoutes);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc));
 
 // Global error handler (must be after all routes)
@@ -71,7 +73,7 @@ app.use((error, req, res, next) => {
 });
 
 // Server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

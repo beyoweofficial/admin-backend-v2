@@ -140,7 +140,7 @@ Response:
 
 ### **Access Swagger UI:**
 1. Start your server: `npm start`
-2. Visit: `http://localhost:5000/api-docs`
+2. Visit: `http://localhost:5001/api-docs`
 3. Test the new endpoints directly in the browser
 
 ### **Key Test Scenarios:**
