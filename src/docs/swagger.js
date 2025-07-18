@@ -22,7 +22,7 @@ const swaggerJsDoc = {
     schemas: {
       Product: {
         type: "object",
-        required: ["productCode", "name", "price", "categoryId", "subcategoryId"],
+        required: ["productCode", "name", "basePrice", "categoryId", "subcategoryId"],
         properties: {
           productCode: { 
             type: "string", 
@@ -31,8 +31,27 @@ const swaggerJsDoc = {
           },
           name: { type: "string", description: "Product name" },
           description: { type: "string", description: "Product description" },
-          price: { type: "number", description: "Product price" },
-          offerPrice: { type: "number", description: "Discounted price (optional)" },
+          // New pricing system
+          basePrice: { 
+            type: "number", 
+            description: "Base cost price of the product",
+            example: 1000
+          },
+          profitMarginPercentage: { 
+            type: "number", 
+            default: 65,
+            description: "Profit margin percentage (default: 65%)",
+            example: 65
+          },
+          discountPercentage: { 
+            type: "number", 
+            default: 81,
+            description: "Display discount percentage (default: 81%)",
+            example: 81
+          },
+          // Legacy fields (auto-calculated)
+          price: { type: "number", description: "Calculated original price for display" },
+          offerPrice: { type: "number", description: "Actual selling price (profit margin price)" },
           categoryId: { type: "string", description: "Category ID" },
           subcategoryId: { type: "string", description: "Subcategory ID" },
           inStock: { type: "boolean", default: true, description: "Stock availability" },
@@ -45,6 +64,43 @@ const swaggerJsDoc = {
             items: { type: "string" },
             description: "Product tags (comma-separated string)"
           },
+          // Inventory fields
+          receivedDate: {
+            type: "string",
+            description: "Date when product was received (DD-MM-YYYY format, auto-generated if empty)",
+            example: "15-07-2025"
+          },
+          caseQuantity: {
+            type: "string",
+            description: "Quantity per case description",
+            example: "qty:100 box"
+          },
+          receivedCase: {
+            type: "integer",
+            description: "Number of cases received",
+            example: 3
+          },
+          brandName: {
+            type: "string",
+            description: "Brand name of the product",
+            example: "Ajantha fireworks"
+          },
+          totalAvailableQuantity: {
+            type: "integer",
+            description: "Total available quantity (calculated from cases × quantity)",
+            example: 300
+          },
+          // Supplier fields
+          supplierName: {
+            type: "string",
+            description: "Supplier name (optional)",
+            example: "ABC Suppliers"
+          },
+          supplierPhone: {
+            type: "string",
+            description: "Supplier phone number (10 digits, optional)",
+            example: "9876543210"
+          }
         }
       },
       ProductDetailed: {
@@ -54,8 +110,15 @@ const swaggerJsDoc = {
           productCode: { type: "string", description: "Unique product code (uppercase alphanumeric)" },
           name: { type: "string", description: "Product name" },
           description: { type: "string", description: "Product description" },
-          price: { type: "number", description: "Original price" },
-          offerPrice: { type: "number", description: "Discounted price (if applicable)" },
+          // New pricing system
+          basePrice: { type: "number", description: "Base cost price" },
+          profitMarginPercentage: { type: "number", description: "Profit margin percentage" },
+          profitMarginPrice: { type: "number", description: "Price with profit margin" },
+          discountPercentage: { type: "number", description: "Display discount percentage" },
+          calculatedOriginalPrice: { type: "number", description: "Calculated original price for display" },
+          offerPrice: { type: "number", description: "Actual selling price" },
+          // Legacy field
+          price: { type: "number", description: "Original price (same as calculatedOriginalPrice)" },
           categoryId: { 
             type: "object",
             properties: {
@@ -93,6 +156,15 @@ const swaggerJsDoc = {
             items: { type: "string" },
             description: "Product tags"
           },
+          // Inventory fields
+          receivedDate: { type: "string", description: "Date when product was received (DD-MM-YYYY)" },
+          caseQuantity: { type: "string", description: "Quantity per case description" },
+          receivedCase: { type: "integer", description: "Number of cases received" },
+          brandName: { type: "string", description: "Brand name" },
+          totalAvailableQuantity: { type: "integer", description: "Total available quantity" },
+          // Supplier fields
+          supplierName: { type: "string", description: "Supplier name" },
+          supplierPhone: { type: "string", description: "Supplier phone number" },
           createdAt: { type: "string", format: "date-time", description: "Creation timestamp" },
           updatedAt: { type: "string", format: "date-time", description: "Last update timestamp" },
           savings: { type: "number", description: "Amount saved if offer price exists" },
@@ -283,7 +355,7 @@ const swaggerJsDoc = {
             "multipart/form-data": {
               schema: {
                 type: "object",
-                required: ["productCode", "name", "price", "categoryId", "subcategoryId", "images"],
+                required: ["productCode", "name", "basePrice", "categoryId", "subcategoryId", "images"],
                 properties: {
                   productCode: { 
                     type: "string", 
@@ -292,8 +364,27 @@ const swaggerJsDoc = {
                   },
                   name: { type: "string", description: "Product name" },
                   description: { type: "string", description: "Product description" },
-                  price: { type: "number", description: "Product price" },
-                  offerPrice: { type: "number", description: "Discounted price (optional)" },
+                  // New pricing system
+                  basePrice: { 
+                    type: "number", 
+                    description: "Base cost price of the product (required)",
+                    example: 1000
+                  },
+                  profitMarginPercentage: { 
+                    type: "number", 
+                    default: 65,
+                    description: "Profit margin percentage (default: 65%)",
+                    example: 65
+                  },
+                  discountPercentage: { 
+                    type: "number", 
+                    default: 81,
+                    description: "Display discount percentage (default: 81%)",
+                    example: 81
+                  },
+                  // Legacy fields (optional, will be calculated)
+                  price: { type: "number", description: "Legacy price field (auto-calculated)" },
+                  offerPrice: { type: "number", description: "Legacy offer price (auto-calculated)" },
                   categoryId: { type: "string", description: "Category ID" },
                   subcategoryId: { type: "string", description: "Subcategory ID" },
                   inStock: { type: "boolean", default: true, description: "Stock availability" },
@@ -302,6 +393,43 @@ const swaggerJsDoc = {
                   isActive: { type: "boolean", default: true, description: "Product active status" },
                   bestSeller: { type: "boolean", default: false, description: "Best seller flag" },
                   tags: { type: "string", description: "Comma-separated tags" },
+                  // Inventory fields
+                  receivedDate: {
+                    type: "string",
+                    description: "Date when product was received (DD-MM-YYYY format, auto-generated if empty)",
+                    example: "15-07-2025"
+                  },
+                  caseQuantity: {
+                    type: "string",
+                    description: "Quantity per case description",
+                    example: "qty:100 box"
+                  },
+                  receivedCase: {
+                    type: "integer",
+                    description: "Number of cases received",
+                    example: 3
+                  },
+                  brandName: {
+                    type: "string",
+                    description: "Brand name of the product",
+                    example: "Ajantha fireworks"
+                  },
+                  totalAvailableQuantity: {
+                    type: "integer",
+                    description: "Total available quantity",
+                    example: 300
+                  },
+                  // Supplier fields
+                  supplierName: {
+                    type: "string",
+                    description: "Supplier name (optional)",
+                    example: "ABC Suppliers"
+                  },
+                  supplierPhone: {
+                    type: "string",
+                    description: "Supplier phone number (10 digits, optional)",
+                    example: "9876543210"
+                  },
                   images: {
                     type: "array",
                     items: { type: "string", format: "binary" },
@@ -331,34 +459,46 @@ const swaggerJsDoc = {
                   success: true,
                   message: "Product created successfully",
                   product: {
-                    _id: "60d21b4667d0d8992e610c85",
-                    productCode: "PWH2024",
-                    name: "Premium Wireless Headphones",
-                    description: "High-quality wireless headphones with noise cancellation",
-                    price: 299.99,
-                    offerPrice: 249.99,
+                    _id: "687ab4d03facfb3ec6ffb9ed",
+                    productCode: "101",
+                    name: "LAXMI",
+                    description: "BEST PRODUCT",
+                    basePrice: 100,
+                    profitMarginPercentage: 65,
+                    profitMarginPrice: 165,
+                    discountPercentage: 81,
+                    calculatedOriginalPrice: 868.4210526315792,
+                    offerPrice: 165,
+                    price: 868.4210526315792,
                     categoryId: {
-                      _id: "60d21b4667d0d8992e610c80",
-                      name: "Electronics"
+                      _id: "6876929e01f4d000003e1a45",
+                      name: "NIGHT LIGHTS"
                     },
                     subcategoryId: {
-                      _id: "60d21b4667d0d8992e610c81",
-                      name: "Audio"
+                      _id: "687692a801f4d000003e1a4c",
+                      name: "SPARKLES"
                     },
                     images: [
                       {
-                        url: "https://res.cloudinary.com/demo/image/upload/v1/products/headphones1.jpg",
-                        publicId: "products/headphones1"
+                        url: "https://res.cloudinary.com/demo/image/upload/v1/products/laxmi1.jpg",
+                        publicId: "products/laxmi1"
                       }
                     ],
                     inStock: true,
-                    stockQuantity: 25,
-                    youtubeLink: "https://www.youtube.com/watch?v=example",
+                    stockQuantity: 300,
+                    youtubeLink: "",
                     isActive: true,
-                    bestSeller: true,
-                    tags: ["wireless", "noise-cancelling", "premium"],
-                    createdAt: "2023-06-22T10:30:00.000Z",
-                    updatedAt: "2023-06-22T10:30:00.000Z"
+                    bestSeller: false,
+                    tags: ["fireworks", "diwali"],
+                    receivedDate: "15-07-2025",
+                    caseQuantity: "qty:100 box",
+                    receivedCase: 3,
+                    brandName: "Ajantha fireworks",
+                    totalAvailableQuantity: 300,
+                    supplierName: "ABC Suppliers",
+                    supplierPhone: "9876543210",
+                    createdAt: "2025-07-18T20:55:44.047Z",
+                    updatedAt: "2025-07-18T20:55:44.047Z"
                   }
                 }
               }

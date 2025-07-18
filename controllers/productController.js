@@ -5,15 +5,52 @@ const cloudinary = require('../config/cloudinary');
 exports.createProduct = async (req, res) => {
   try {
     const {
-      productCode, name, description, price, offerPrice, categoryId,
-      subcategoryId, inStock = true, bestSeller = false, tags,
-      stockQuantity = 0, youtubeLink = '', isActive = true
+      productCode, name, description, 
+      // New pricing fields
+      basePrice, profitMarginPercentage = 65, discountPercentage = 81,
+      // Legacy fields for backward compatibility
+      price, offerPrice, 
+      categoryId, subcategoryId, inStock = true, bestSeller = false, tags,
+      stockQuantity = 0, youtubeLink = '', isActive = true,
+      // New inventory fields
+      receivedDate, caseQuantity = '', receivedCase = 0, brandName = '', totalAvailableQuantity,
+      // Supplier fields
+      supplierName = '', supplierPhone = ''
     } = req.body;
 
     // Validate required fields
     if (!productCode) {
       return res.status(400).json({ message: 'Product code is required' });
     }
+
+    // Validate pricing fields
+    if (!basePrice && !price) {
+      return res.status(400).json({ message: 'Base price is required' });
+    }
+
+    // Calculate pricing using the new system
+    const finalBasePrice = parseFloat(basePrice || price); // Convert to number and use basePrice if provided, otherwise fall back to legacy price
+    
+    // Validate that finalBasePrice is a valid number
+    if (isNaN(finalBasePrice) || finalBasePrice <= 0) {
+      return res.status(400).json({ message: 'Base price must be a valid positive number' });
+    }
+    
+    // Ensure all pricing parameters are numbers
+    const finalProfitMarginPercentage = parseFloat(profitMarginPercentage) || 65;
+    const finalDiscountPercentage = parseFloat(discountPercentage) || 81;
+    
+    const pricingDetails = Product.calculatePricing(
+      finalBasePrice,
+      finalProfitMarginPercentage,
+      finalDiscountPercentage
+    );
+
+    console.log('💰 Creating product with pricing:', {
+      basePrice: finalBasePrice,
+      profitMarginPercentage: finalProfitMarginPercentage,
+      discountPercentage: finalDiscountPercentage
+    });
 
     // Check if product code already exists
     const existingProduct = await Product.findOne({ productCode: productCode.toUpperCase() });
@@ -48,12 +85,19 @@ exports.createProduct = async (req, res) => {
       });
     }
 
-    const product = new Product({
+    const productData = {
       productCode: productCode.toUpperCase(),
       name,
       description,
-      price,
-      offerPrice,
+      // New pricing fields
+      basePrice: finalBasePrice,
+      profitMarginPercentage: finalProfitMarginPercentage,
+      discountPercentage: finalDiscountPercentage,
+      profitMarginPrice: pricingDetails.profitMarginPrice,
+      calculatedOriginalPrice: pricingDetails.calculatedOriginalPrice,
+      offerPrice: pricingDetails.offerPrice,
+      // Legacy price field
+      price: pricingDetails.price,
       categoryId,
       subcategoryId,
       images: uploadedImages,
@@ -63,8 +107,18 @@ exports.createProduct = async (req, res) => {
       youtubeLink,
       isActive,
       tags: tags?.split(',').map(tag => tag.trim()),
-    });
+      // New inventory fields
+      receivedDate,
+      caseQuantity,
+      receivedCase: parseInt(receivedCase) || 0,
+      brandName,
+      totalAvailableQuantity: totalAvailableQuantity ? parseInt(totalAvailableQuantity) : undefined, // If provided, use it; otherwise let middleware calculate
+      // Supplier fields
+      supplierName,
+      supplierPhone,
+    };
 
+    const product = new Product(productData);
     await product.save();
     
     // Return the created product with populated category and subcategory
@@ -186,8 +240,15 @@ exports.getProductById = async (req, res) => {
       productCode: product.productCode,
       name: product.name,
       description: product.description,
+      // Legacy price fields
       price: product.price,
       offerPrice: product.offerPrice,
+      // New pricing fields
+      basePrice: product.basePrice,
+      profitMarginPercentage: product.profitMarginPercentage,
+      profitMarginPrice: product.profitMarginPrice,
+      discountPercentage: product.discountPercentage,
+      calculatedOriginalPrice: product.calculatedOriginalPrice,
       categoryId: product.categoryId,
       subcategoryId: product.subcategoryId,
       images: product.images,
@@ -199,6 +260,15 @@ exports.getProductById = async (req, res) => {
       tags: product.tags,
       createdAt: product.createdAt,
       updatedAt: product.updatedAt,
+      // New inventory fields
+      receivedDate: product.receivedDate,
+      caseQuantity: product.caseQuantity,
+      receivedCase: product.receivedCase,
+      brandName: product.brandName,
+      totalAvailableQuantity: product.totalAvailableQuantity,
+      // Supplier fields
+      supplierName: product.supplierName,
+      supplierPhone: product.supplierPhone,
       // Additional calculated fields
       savings: savings,
       savingsPercentage: savingsPercentage,
@@ -229,9 +299,17 @@ exports.updateProduct = async (req, res) => {
     const { id } = req.params;
 
     const {
-      productCode, name, description, price, offerPrice, categoryId,
-      subcategoryId, inStock, bestSeller, tags, stockQuantity, youtubeLink,
-      isActive, removeImages
+      productCode, name, description, 
+      // New pricing fields
+      basePrice, profitMarginPercentage, discountPercentage,
+      // Legacy fields for backward compatibility
+      price, offerPrice, 
+      categoryId, subcategoryId, inStock, bestSeller, tags, stockQuantity, youtubeLink,
+      isActive, removeImages,
+      // New inventory fields
+      receivedDate, caseQuantity, receivedCase, brandName, totalAvailableQuantity,
+      // Supplier fields
+      supplierName, supplierPhone
     } = req.body;
 
     const product = await Product.findById(id)
@@ -302,15 +380,41 @@ exports.updateProduct = async (req, res) => {
     // Update product fields
     product.name = name || product.name;
     product.description = description || product.description;
-    product.price = price || product.price;
-    product.offerPrice = offerPrice !== undefined ? offerPrice : product.offerPrice;
     product.categoryId = categoryId || product.categoryId;
     product.subcategoryId = subcategoryId || product.subcategoryId;
     product.inStock = inStock !== undefined ? inStock : product.inStock;
     product.bestSeller = bestSeller !== undefined ? bestSeller : product.bestSeller;
-    product.stockQuantity = stockQuantity !== undefined ? stockQuantity : product.stockQuantity;
     product.youtubeLink = youtubeLink !== undefined ? youtubeLink : product.youtubeLink;
     product.isActive = isActive !== undefined ? isActive : product.isActive;
+    
+    // Update pricing fields if provided
+    if (basePrice !== undefined) {
+      const finalBasePrice = parseFloat(basePrice);
+      const finalProfitMarginPercentage = parseFloat(profitMarginPercentage) || product.profitMarginPercentage;
+      const finalDiscountPercentage = parseFloat(discountPercentage) || product.discountPercentage;
+      
+      if (finalBasePrice > 0) {
+        product.updatePricing(finalBasePrice, finalProfitMarginPercentage, finalDiscountPercentage);
+      }
+    }
+    
+    // Update inventory fields if provided
+    if (caseQuantity !== undefined || receivedCase !== undefined || brandName !== undefined || totalAvailableQuantity !== undefined) {
+      product.updateInventory(
+        receivedCase !== undefined ? parseInt(receivedCase) : undefined,
+        caseQuantity,
+        brandName,
+        totalAvailableQuantity !== undefined ? parseInt(totalAvailableQuantity) : undefined
+      );
+    }
+    
+    // Update supplier fields
+    if (supplierName !== undefined) {
+      product.supplierName = supplierName;
+    }
+    if (supplierPhone !== undefined) {
+      product.supplierPhone = supplierPhone;
+    }
     
     if (tags) {
       product.tags = tags.split(',').map(tag => tag.trim());
