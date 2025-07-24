@@ -9,6 +9,7 @@ const categoryRoutes = require('./routes/categoryRoutes');
 const subcategoryRoutes = require('./routes/subcategoryRoutes');
 const productRoutes = require('./routes/productRoutes');
 const quickShoppingRoutes = require('./routes/quickShoppingRoutes');
+const priceListRoutes = require('./routes/priceListRoutes');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDoc = require('./src/docs/swagger');
 
@@ -26,6 +27,7 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/subcategories', subcategoryRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/quick-shopping', quickShoppingRoutes);
+app.use('/api/price-lists', priceListRoutes);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc));
 
 // Global error handler (must be after all routes)

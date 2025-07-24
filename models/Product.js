@@ -144,6 +144,10 @@ const productSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  featured: {
+    type: Boolean,
+    default: false,
+  },
   tags: [String],
   
   // ====== NEW INVENTORY FIELDS ======
@@ -216,7 +220,7 @@ const productSchema = new mongoose.Schema({
   },
 }, { timestamps: true });
 
-// Pre-save middleware for auto-generation of fields
+// Pre-save middleware for auto-generation of fields and validation
 productSchema.pre('save', function(next) {
   // Auto-generate received date if not provided (DD-MM-YYYY format)
   if (!this.receivedDate) {
@@ -225,6 +229,13 @@ productSchema.pre('save', function(next) {
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const year = now.getFullYear();
     this.receivedDate = `${day}-${month}-${year}`;
+  }
+  
+  // Ensure mutual exclusivity between bestSeller and featured
+  if (this.bestSeller && this.featured) {
+    const error = new Error('A product cannot be both a bestseller and featured product at the same time');
+    error.name = 'ValidationError';
+    return next(error);
   }
   
   next();

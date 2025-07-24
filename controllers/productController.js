@@ -10,7 +10,7 @@ exports.createProduct = async (req, res) => {
       basePrice, profitMarginPercentage = 65, discountPercentage = 81,
       // Legacy fields for backward compatibility
       price, offerPrice, 
-      categoryId, subcategoryId, inStock = true, bestSeller = false, tags,
+      categoryId, subcategoryId, inStock = true, bestSeller = false, featured = false, tags,
       stockQuantity = 0, youtubeLink = '', isActive = true,
       // New inventory fields
       receivedDate, caseQuantity = '', receivedCase = 0, brandName = '', totalAvailableQuantity,
@@ -58,6 +58,13 @@ exports.createProduct = async (req, res) => {
       return res.status(409).json({ message: 'Product code already exists. Please use a unique code.' });
     }
 
+    // Validate mutual exclusivity between bestSeller and featured
+    if (bestSeller && featured) {
+      return res.status(400).json({ 
+        message: 'A product cannot be both a bestseller and featured product at the same time. Please select only one option.' 
+      });
+    }
+
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: 'At least 1 image required' });
     }
@@ -103,6 +110,7 @@ exports.createProduct = async (req, res) => {
       images: uploadedImages,
       inStock,
       bestSeller,
+      featured,
       stockQuantity,
       youtubeLink,
       isActive,
@@ -154,7 +162,7 @@ exports.createProduct = async (req, res) => {
 exports.getAllProducts = async (req, res) => {
   try {
     const {
-      categoryId, subcategoryId, tag, bestSeller, search,
+      categoryId, subcategoryId, tag, bestSeller, featured, search,
       page = 1, limit = 10, isActive, inStock, minStock, maxStock
     } = req.query;
 
@@ -163,6 +171,8 @@ exports.getAllProducts = async (req, res) => {
     if (categoryId) filter.categoryId = categoryId;
     if (subcategoryId) filter.subcategoryId = subcategoryId;
     if (bestSeller === 'true') filter.bestSeller = true;
+    if (featured === 'true') filter.featured = true;
+    if (featured === 'false') filter.featured = false;
     if (isActive !== undefined) filter.isActive = isActive === 'true';
     if (inStock !== undefined) filter.inStock = inStock === 'true';
     if (tag) filter.tags = { $in: [tag] };
@@ -304,7 +314,7 @@ exports.updateProduct = async (req, res) => {
       basePrice, profitMarginPercentage, discountPercentage,
       // Legacy fields for backward compatibility
       price, offerPrice, 
-      categoryId, subcategoryId, inStock, bestSeller, tags, stockQuantity, youtubeLink,
+      categoryId, subcategoryId, inStock, bestSeller, featured, tags, stockQuantity, youtubeLink,
       isActive, removeImages,
       // New inventory fields
       receivedDate, caseQuantity, receivedCase, brandName, totalAvailableQuantity,
@@ -377,13 +387,24 @@ exports.updateProduct = async (req, res) => {
       }
     }
     
+    // Validate mutual exclusivity between bestSeller and featured before updating
+    const newBestSeller = bestSeller !== undefined ? bestSeller : product.bestSeller;
+    const newFeatured = featured !== undefined ? featured : product.featured;
+    
+    if (newBestSeller && newFeatured) {
+      return res.status(400).json({ 
+        message: 'A product cannot be both a bestseller and featured product at the same time. Please select only one option.' 
+      });
+    }
+
     // Update product fields
     product.name = name || product.name;
     product.description = description || product.description;
     product.categoryId = categoryId || product.categoryId;
     product.subcategoryId = subcategoryId || product.subcategoryId;
     product.inStock = inStock !== undefined ? inStock : product.inStock;
-    product.bestSeller = bestSeller !== undefined ? bestSeller : product.bestSeller;
+    product.bestSeller = newBestSeller;
+    product.featured = newFeatured;
     product.youtubeLink = youtubeLink !== undefined ? youtubeLink : product.youtubeLink;
     product.isActive = isActive !== undefined ? isActive : product.isActive;
     
@@ -511,6 +532,7 @@ exports.getDashboardStats = async (req, res) => {
     const [
       totalProducts,
       bestSellers,
+      featuredProducts,
       outOfStock,
       inStock,
       productsWithOffer,
@@ -524,6 +546,9 @@ exports.getDashboardStats = async (req, res) => {
       
       // Products marked as best sellers
       Product.countDocuments({ bestSeller: true }),
+      
+      // Products marked as featured
+      Product.countDocuments({ featured: true }),
       
       // Products that are out of stock
       Product.countDocuments({ inStock: false }),
@@ -578,6 +603,7 @@ exports.getDashboardStats = async (req, res) => {
     const stats = {
       totalProducts,
       bestSellers,
+      featuredProducts,
       outOfStock,
       inStock,
       productsWithOffer,
@@ -722,6 +748,178 @@ exports.getProductCountsByCategory = async (req, res) => {
     console.error('Error fetching category statistics:', error);
     res.status(500).json({ 
       message: 'Failed to fetch category statistics',
+      error: error.message 
+    });
+  }
+};
+
+/**
+ * @route   GET /products/featured
+ * @desc    Get all featured products
+ * @access  Public
+ */
+exports.getFeaturedProducts = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    
+    const filter = { 
+      featured: true, 
+      isActive: true 
+    };
+    
+    const skip = (page - 1) * limit;
+    const total = await Product.countDocuments(filter);
+    const products = await Product.find(filter)
+      .populate('categoryId', 'name')
+      .populate('subcategoryId', 'name')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
+
+    res.json({
+      success: true,
+      products,
+      total,
+      page: Number(page),
+      pages: Math.ceil(total / limit),
+      message: `Found ${total} featured products`
+    });
+  } catch (error) {
+    console.error('Error fetching featured products:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to fetch featured products', 
+      error: error.message 
+    });
+  }
+};
+
+/**
+ * @route   GET /products/best-sellers
+ * @desc    Get all best seller products
+ * @access  Public
+ */
+exports.getBestSellerProducts = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    
+    const filter = { 
+      bestSeller: true, 
+      isActive: true 
+    };
+    
+    const skip = (page - 1) * limit;
+    const total = await Product.countDocuments(filter);
+    const products = await Product.find(filter)
+      .populate('categoryId', 'name')
+      .populate('subcategoryId', 'name')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
+
+    res.json({
+      success: true,
+      products,
+      total,
+      page: Number(page),
+      pages: Math.ceil(total / limit),
+      message: `Found ${total} best seller products`
+    });
+  } catch (error) {
+    console.error('Error fetching best seller products:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to fetch best seller products', 
+      error: error.message 
+    });
+  }
+};
+
+/**
+ * @route   PATCH /products/:id/toggle-featured
+ * @desc    Toggle featured status of a product
+ * @access  Private (Admin only)
+ */
+exports.toggleFeaturedStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    
+    // If trying to set featured to true, ensure bestSeller is false
+    const newFeaturedStatus = !product.featured;
+    if (newFeaturedStatus && product.bestSeller) {
+      product.bestSeller = false;
+    }
+    
+    product.featured = newFeaturedStatus;
+    await product.save();
+    
+    const statusMessage = product.featured ? 'marked as featured' : 'removed from featured';
+    
+    res.json({
+      success: true,
+      message: `Product ${statusMessage} successfully`,
+      product: {
+        _id: product._id,
+        name: product.name,
+        featured: product.featured,
+        bestSeller: product.bestSeller
+      }
+    });
+  } catch (error) {
+    console.error('Error toggling featured status:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to toggle featured status', 
+      error: error.message 
+    });
+  }
+};
+
+/**
+ * @route   PATCH /products/:id/toggle-bestseller
+ * @desc    Toggle best seller status of a product
+ * @access  Private (Admin only)
+ */
+exports.toggleBestSellerStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    
+    // If trying to set bestSeller to true, ensure featured is false
+    const newBestSellerStatus = !product.bestSeller;
+    if (newBestSellerStatus && product.featured) {
+      product.featured = false;
+    }
+    
+    product.bestSeller = newBestSellerStatus;
+    await product.save();
+    
+    const statusMessage = product.bestSeller ? 'marked as best seller' : 'removed from best sellers';
+    
+    res.json({
+      success: true,
+      message: `Product ${statusMessage} successfully`,
+      product: {
+        _id: product._id,
+        name: product.name,
+        featured: product.featured,
+        bestSeller: product.bestSeller
+      }
+    });
+  } catch (error) {
+    console.error('Error toggling best seller status:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to toggle best seller status', 
       error: error.message 
     });
   }
