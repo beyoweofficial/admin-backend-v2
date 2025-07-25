@@ -15,7 +15,9 @@ exports.createProduct = async (req, res) => {
       // New inventory fields
       receivedDate, caseQuantity = '', receivedCase = 0, brandName = '', totalAvailableQuantity,
       // Supplier fields
-      supplierName = '', supplierPhone = ''
+      supplierName = '', supplierPhone = '',
+      // Customer quantity limit
+      maxQuantityPerCustomer
     } = req.body;
 
     // Validate required fields
@@ -124,6 +126,8 @@ exports.createProduct = async (req, res) => {
       // Supplier fields
       supplierName,
       supplierPhone,
+      // Customer quantity limit
+      maxQuantityPerCustomer: maxQuantityPerCustomer ? parseInt(maxQuantityPerCustomer) : null,
     };
 
     const product = new Product(productData);
@@ -319,7 +323,9 @@ exports.updateProduct = async (req, res) => {
       // New inventory fields
       receivedDate, caseQuantity, receivedCase, brandName, totalAvailableQuantity,
       // Supplier fields
-      supplierName, supplierPhone
+      supplierName, supplierPhone,
+      // Customer quantity limit
+      maxQuantityPerCustomer
     } = req.body;
 
     const product = await Product.findById(id)
@@ -435,6 +441,11 @@ exports.updateProduct = async (req, res) => {
     }
     if (supplierPhone !== undefined) {
       product.supplierPhone = supplierPhone;
+    }
+    
+    // Update customer quantity limit
+    if (maxQuantityPerCustomer !== undefined) {
+      product.maxQuantityPerCustomer = maxQuantityPerCustomer ? parseInt(maxQuantityPerCustomer) : null;
     }
     
     if (tags) {

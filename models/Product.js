@@ -218,6 +218,20 @@ const productSchema = new mongoose.Schema({
       message: 'Supplier phone must be 10 digits'
     }
   },
+  
+  // ====== CUSTOMER QUANTITY LIMIT FIELD ======
+  maxQuantityPerCustomer: {
+    type: Number,
+    default: null, // null means no limit
+    min: 1,
+    validate: {
+      validator: function(v) {
+        // Allow null/undefined (no limit) or positive numbers
+        return v === null || v === undefined || (Number.isInteger(v) && v > 0);
+      },
+      message: 'Max quantity per customer must be a positive integer or null for no limit'
+    }
+  },
 }, { timestamps: true });
 
 // Pre-save middleware for auto-generation of fields and validation

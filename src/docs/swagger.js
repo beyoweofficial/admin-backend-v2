@@ -100,6 +100,12 @@ const swaggerJsDoc = {
             type: "string",
             description: "Supplier phone number (10 digits, optional)",
             example: "9876543210"
+          },
+          maxQuantityPerCustomer: {
+            type: "integer",
+            description: "Maximum quantity each customer can add to cart (optional, null for no limit)",
+            example: 10,
+            minimum: 1
           }
         }
       },
@@ -165,6 +171,8 @@ const swaggerJsDoc = {
           // Supplier fields
           supplierName: { type: "string", description: "Supplier name" },
           supplierPhone: { type: "string", description: "Supplier phone number" },
+          // Customer quantity limit
+          maxQuantityPerCustomer: { type: "integer", description: "Maximum quantity per customer (null for no limit)" },
           createdAt: { type: "string", format: "date-time", description: "Creation timestamp" },
           updatedAt: { type: "string", format: "date-time", description: "Last update timestamp" },
           savings: { type: "number", description: "Amount saved if offer price exists" },
